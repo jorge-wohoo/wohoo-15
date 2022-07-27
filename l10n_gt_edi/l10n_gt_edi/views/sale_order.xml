@@ -6,8 +6,7 @@
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='payment_term_id']" position="after">
-                <field name="journal_id" attrs="{'invisible':[('journal_group','=',False)]}"/>
-                <field name="journal_group" invisible="1"/>
+                <field name="journal_id" groups="l10n_gt_edi.group_journal_id_sale_order"/>
             </xpath>
         </field>
     </record>

@@ -5,12 +5,13 @@ from typing import List, Set
 from gt_sat_api import DTE, AnulacionDTE, Complemento, Direccion, Emisor, Frase, Item, Receptor
 from gt_sat_api.parsers import dte_to_xml, dte_to_xml_annulled
 from pytz import timezone
+from decimal import *
 
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
 _logger = logging.getLogger(__name__)
-DIGITS = 10
+DIGITS = 2
 
 
 class AccountMove(models.Model):
@@ -23,7 +24,7 @@ class AccountMove(models.Model):
         comodel_name="gt.dte.type",
         readonly=True,
         states={"draft": [("readonly", False)]},
-        default=lambda self: self.env.company_id.default_dte_type_id,
+        default=lambda self: self.env.company.default_dte_type_id,
     )
     allowed_type_ids = fields.Many2many(
         comodel_name="gt.dte.type",
@@ -31,14 +32,13 @@ class AccountMove(models.Model):
     )
     emision_datetime = fields.Datetime(
         copy=False,
-        readonly=True,
     )
     annulated_datetime = fields.Datetime(
         copy=False,
         readonly=True,
     )
     annulment_reason = fields.Text(
-        string="Razón de anulación"
+        string="Razón de anulación",
         copy=False,
     )
     regime = fields.Boolean(
@@ -49,15 +49,56 @@ class AccountMove(models.Model):
     use_in_sat = fields.Boolean(
         related="journal_id.use_in_sat",
     )
+    subscription_number = fields.Integer(
+        string="Numero de Abono",
+    )
+    payment_amount = fields.Integer(
+        compute="_compute_payment_amount",
+        string="Monto Abono",
+    )
+    fcam_invoice = fields.Boolean(
+        compute="_compute_fcam_invoice",
+    )
+    accreditation_date = fields.Datetime(
+        copy=False,
+        readonly=True,
+    )
+    import_invoice = fields.Boolean(
+        string="Factura de importacion"
+    )
+    sale_order_id = fields.Many2one(
+        comodel_name='sale.order',
+    )
+    transport = fields.Char(
+        string='Transporte',
+    )
+    modelo = fields.Char()
+
+
+    @api.onchange("dte_type_id")
+    def _compute_fcam_invoice(self):
+        for record in self:
+            if record.dte_type_id.code == "FCAM":
+                record.fcam_invoice = True
+            else:
+                record.fcam_invoice = False
+
+    @api.depends("subscription_number")
+    def _compute_payment_amount(self):
+        for record in self:
+            record.payment_amount = 0
+            if record.subscription_number:
+                record.payment_amount = record.amount_total / record.subscription_number
 
     def partner_dte_requiered_fields(self):
         return {
-            "name",
-            "vat",
-            "street",
             "city",
-            "state_id",
             "country_id",
+            "email",
+            "name",
+            "state_id",
+            "street",
+            "vat",
             "zip",
         }
 
@@ -127,12 +168,15 @@ class AccountMove(models.Model):
         self.ensure_one()
         return [
             Item(
-                bien_o_servicio="B" if line.product_id.type == "consu" else "S",
+                bien_o_servicio="S" if line.product_id.type == "service" else "B",
                 numero_linea=index + 1,
                 cantidad=line.quantity,
                 unidad_medida=line.product_uom_id.name[:3].upper(),
-                descripcion=line.product_id.name,
-                precio_unitario=round(line.price_unit, DIGITS),
+                descripcion=line.modelo,
+                ImpuestoGravable=line.impuesto_gravable,
+                precio_unitario=float(Decimal(line.price_unit).quantize(Decimal("0.01"), rounding = "ROUND_HALF_UP")),
+                MontoGravable=line.monto_gravable,
+                MontoImpuesto=line.impuesto,
                 descuento_porcentual=line.discount,
                 impuestos_rate={
                     tax.code_name: (
@@ -187,11 +231,35 @@ class AccountMove(models.Model):
         receptor = self.generate_dte_receptor()
         items = self.generate_dte_items()
         self.emision_datetime = fields.Datetime.now()
+        self.accreditation_date = fields.Datetime.now()
         return DTE(
             clase_documento="dte",
+            ImportInvoice=self.import_invoice,
             codigo_moneda=self.currency_id.name,
             fecha_hora_emision=self.emision_datetime.astimezone(timezone(self.env.user.tz)),
             tipo=self.dte_type_id.code,
+            NumeroAbono= self.subscription_number,
+            FechaVencimiento= self.invoice_date_due,
+            MontoAbono= self.payment_amount,
+            CondicionesPago=self.invoice_payment_term_id.name,
+            Vencimiento=self.invoice_date_due,
+            NoOCCliente=self.sale_order_id.name,
+            NombreConsignatarioODestinatario=self.partner_id.name,
+            DireccionConsignatarioODestinatario=self.partner_id.street,
+            CodigoConsignatarioODestinatario=0,
+            NombreComprador=self.partner_id.name,
+            DireccionComprador=self.partner_id.street,
+            CodigoComprador=0,
+            OtraReferencia="N/A",
+            INCOTERM=self.invoice_incoterm_id.code,
+            NombreExportador=self.company_id.name,
+            CodigoExportador=self.company_id.export_code,
+            CodigoCliente=self.partner_id.ref,
+            Transporte=self.transport,
+            NoPedido=self.sale_order_id.name,
+            FechaPedido=self.sale_order_id.date_order,
+            modelo=self.modelo,
+            Agente=self.invoice_user_id.name,
             emisor=emisor,
             receptor=receptor,
             frases=[
@@ -295,8 +363,52 @@ class AccountMove(models.Model):
         """Generate an xml file per invoice and save them on attachments"""
         annulled = isinstance(dte, AnulacionDTE)
         xml_str = dte_to_xml_annulled(dte) if annulled else dte_to_xml(dte)
-        fname = self.get_fname_xml(annulled)
-        self.generate_attachment_from_xml_string(xml_str, fname)
+        if not annulled:
+            tag_adendda = ("<dte:Adenda>" '\n'
+                        "<Agente>%(Agente)s</Agente>" '\n'
+                        "<Vencimiento>%(Vencimiento)s</Vencimiento>" '\n'
+                        "<NumeroInterno>%(NumeroInterno)s</NumeroInterno>" '\n'
+                        "</dte:Adenda>"
+            ) % {"Agente": self.invoice_user_id.name, "Vencimiento": self.invoice_date_due, "NumeroInterno": self.name}
+            index_final = xml_str.find("</dte:DTE>")
+            dte_end = xml_str.find("</dte:SAT>")
+            if self.invoice_payment_term_id:
+                index_adendda_tag = tag_adendda.find("</dte:Adenda>")
+                tag_adendda_payment_term = ("<CondicionesPago>%(CondicionesPago)s</CondicionesPago>" '\n') % {"CondicionesPago": self.invoice_payment_term_id.name}
+                tag_adendda = tag_adendda[:index_adendda_tag] + tag_adendda_payment_term + tag_adendda[index_adendda_tag:]
+            if self.partner_id.ref:
+                index_adendda_tag = tag_adendda.find("</dte:Adenda>")
+                tag_adendda_codigo_cliente = ("<CodigoCliente>%(CodigoCliente)s</CodigoCliente>" '\n') % {"CodigoCliente": self.partner_id.ref}
+                tag_adendda = tag_adendda[:index_adendda_tag] + tag_adendda_codigo_cliente + tag_adendda[index_adendda_tag:]
+            if self.sale_order_id:
+                index_adendda_tag = tag_adendda.find("</dte:Adenda>")
+                tag_adendda_sale_order = ("<NoOCCliente>%(NoOcCliente)s</NoOCCliente>" '\n'
+                                        "<FechaPedido>%(FechaPedido)s</FechaPedido>" '\n'
+                                        "<NoPedido>%(NoPedido)s</NoPedido>" '\n'
+                ) % {"NoOcCliente": self.sale_order_id.name, "FechaPedido": self.sale_order_id.date_order, "NoPedido": self.sale_order_id.name}
+                tag_adendda = tag_adendda[:index_adendda_tag] + tag_adendda_sale_order + tag_adendda[index_adendda_tag:]
+            if self.transport:
+                index_adendda_tag = tag_adendda.find("</dte:Adenda>")
+                tag_adendda_transporte = ("<Transporte>%(Transporte)s</Transporte>" '\n') % {"Transporte": self.transport}
+                tag_adendda = tag_adendda[:index_adendda_tag] + tag_adendda_transporte + tag_adendda[index_adendda_tag:]
+            
+            if self.tax_totals_json:
+                if "TotalMontoImpuesto" in xml_str:
+                    index_total_monto_impuesto = xml_str.index("TotalMontoImpuesto")
+                    index2 = xml_str.index("</dte:TotalImpuestos>")
+                    total_monto_impuesto = ("%(ImpuestoTotal)s")  % {"ImpuestoTotal": Decimal(self.amount_tax_signed).quantize(Decimal("0.01"), rounding = "ROUND_HALF_UP")}
+                    if self.move_type in ["in_refund", "out_refund"]:
+                        total_monto_impuesto = ("%(ImpuestoTotal)s")  % {"ImpuestoTotal": -(Decimal(self.amount_tax_signed).quantize(Decimal("0.01"), rounding = "ROUND_HALF_UP"))}
+                    if self.currency_id.name == "USD":
+                        total_monto_impuesto = ("%(ImpuestoTotal)s")  % {"ImpuestoTotal": (Decimal(self.amount_tax).quantize(Decimal("0.01"), rounding = "ROUND_HALF_UP"))}
+                    
+                    xml_str = xml_str[:index_total_monto_impuesto+20] + str(total_monto_impuesto) + xml_str[index2-14:]
+            xml_str = xml_str[:index_final + 9] + tag_adendda + xml_str[dte_end - 1:]
+            fname = self.get_fname_xml(annulled)
+            self.generate_attachment_from_xml_string(xml_str, fname)
+        else:
+            fname = self.get_fname_xml(annulled)
+            self.generate_attachment_from_xml_string(xml_str, fname)
 
     def send_xml_to_sat(self, annulled=False):
         """Function to send the XML string to SAT"""
@@ -341,13 +453,8 @@ class AccountMove(models.Model):
         """Post/Validate the documents"""
         res = super().action_post()
         self.action_generate_and_send_xml()
-        self.check_infile_status()
-        return res
 
-    def check_infile_status(self):
-        for move in self:
-            if move.infile_status != "done":
-                ValidationError("La factura no se valido con el SAT no se a validado")
+        return res
 
     def action_generate_and_send_xml(self, annulled=False):
         """Call the methods to generate a new XML file and try to send it to SAT"""
@@ -361,6 +468,8 @@ class AccountMove(models.Model):
                         "invoice that has not been posted before"
                     )
                 )
+            if move.infile_status == "error" and move.state == "cancel" and move.annulment_reason:
+                annulled=True
             if not annulled and move.state != "posted":
                 raise ValidationError(_("You can only generate XML for posted invoices"))
             dte = move.generate_dte_annulled() if annulled else move.generate_dte()

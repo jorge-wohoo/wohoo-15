@@ -11,6 +11,7 @@
                         <field name="iva_affiliation_id"/>
                         <field name="codigo_establecimiento"/>
                         <field name="default_dte_type_id"/>
+                        <field name="export_code"/>
                     </group>
                 </page>
             </notebook>

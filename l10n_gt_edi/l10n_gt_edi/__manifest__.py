@@ -6,6 +6,7 @@
     "license": "OPL-1",
     "depends": [
         "account",
+        "sale",
         "l10n_gt",
     ],
     "external_dependencies": {
@@ -16,6 +17,7 @@
     "data": [
         # security
         "security/ir.model.access.csv",
+        "security/res_groups.xml",
         # data
         "data/dte_types.xml",
         "data/frases.xml",
@@ -29,5 +31,6 @@
         "views/gt_dte_type.xml",
         "views/gt_frases.xml",
         "views/res_company.xml",
+        "views/sale_order.xml",
     ],
 }

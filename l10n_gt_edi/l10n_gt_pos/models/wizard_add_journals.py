@@ -10,15 +10,15 @@ class WizardAddJournal(models.TransientModel):
     )
 
     def action_pos_order_invoice(self):
-        sales = self.env["pos.order"].browse(self.env.context["active_ids"])
-        for record in sales:
-            record.journal_id = self.journal_id.id
-            if not record.partner_id:
+        orders = self.env["pos.order"].browse(self.env.context["active_ids"])
+        for order in orders:
+            order.journal_id = self.journal_id.id
+            if not order.partner_id:
                 partner = self.env["res.partner"].search(
                     [
                         ("id", "=", "res_partner_cf_gt"),
                     ]
                 )
-                record.partner_id = partner
-            res = record.action_pos_order_invoice()
+                order.partner_id = partner
+            res = order.action_pos_order_invoice()
             res["target"] = ""
