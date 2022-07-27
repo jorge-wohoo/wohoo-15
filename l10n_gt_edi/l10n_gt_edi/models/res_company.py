@@ -11,4 +11,3 @@ class Company(models.Model):
     default_dte_type_id = fields.Many2one(
         comodel_name="gt.dte.type",
     )
-    export_code = fields.Integer()

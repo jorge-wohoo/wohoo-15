@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_account_move_retry_annulation" model="ir.ui.view">
+        <field name="name">view.account.move.retry.annulation</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='button_cancel']" position="after">
+                <button name="retry_annulation" string="Reintentar Anulacion" class="oe_highlight" type="object" attrs="{'invisible': [('infile_status', '!=', 'annulled_error')]}"/>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="Motivo Anulacion" name="motivo_anulacion" attrs="{'invisible': ['&amp;', ('state', '!=', 'draft'), ('infile_uuid', '=', True)]}">
+                    <group>
+                        <field name="motivo_anulacion" attrs="{'invisible': ['&amp;', ('state', '!=', 'draft'), ('infile_status', '!=', 'done')]}"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

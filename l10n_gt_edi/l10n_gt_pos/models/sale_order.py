@@ -1,19 +1,24 @@
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class SaleOrder(models.Model):
     _inherit = "sale.order"
 
-    def _get_default_journal(self):
-        return self.env["account.move"]._search_default_journal(  # pylint: disable=protected-access
-            ["sale"]
-        )
-
     journal_id = fields.Many2one(
         comodel_name="account.journal",
         domain="[('type', '=', 'sale')]",
-        default=_get_default_journal,
     )
+    journal_group = fields.Boolean(
+        compute="_compute_user_in_journal_group",
+        default=False,
+    )
+
+    @api.onchange("state")
+    def _compute_user_in_journal_group(self):
+        for record in self:
+            record.journal_group = bool(
+                self.env.user.has_group("l10n_gt_pos.group_journal_id_sale_order")
+            )
 
     def _prepare_invoice(self):
         invoice_vals = super()._prepare_invoice()
