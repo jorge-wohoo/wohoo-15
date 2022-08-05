@@ -64,7 +64,7 @@ class AccountMove(models.Model):
         readonly=True,
     )
     import_invoice = fields.Boolean(
-        string="Factura de importacion"
+        string="Factura de exportacion"
     )
     sale_order_id = fields.Many2one(
         comodel_name='sale.order',
@@ -403,7 +403,7 @@ class AccountMove(models.Model):
                         total_monto_impuesto = ("%(ImpuestoTotal)s")  % {"ImpuestoTotal": (Decimal(self.amount_tax).quantize(Decimal("0.01"), rounding = "ROUND_HALF_UP"))}
                     
                     xml_str = xml_str[:index_total_monto_impuesto+20] + str(total_monto_impuesto) + xml_str[index2-14:]
-            xml_str = xml_str[:index_final + 9] + tag_adendda + xml_str[dte_end - 3:]
+            xml_str = xml_str[:index_final + 9] + tag_adendda + xml_str[dte_end - 4:]
             fname = self.get_fname_xml(annulled)
             self.generate_attachment_from_xml_string(xml_str, fname)
         else:

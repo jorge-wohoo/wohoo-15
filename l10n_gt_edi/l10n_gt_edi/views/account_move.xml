@@ -12,8 +12,8 @@
                 <field name="payment_amount" attrs="{'invisible': [('fcam_invoice', '=', False)]}"/>
             </field>
             <field name="payment_reference" position="after">
-                <field name="transport"/>
-                <field name="sale_order_id"/>
+                <field name="transport" attrs="{'invisible': [('use_in_sat', '=', False)]}"/>
+                <field name="sale_order_id" attrs="{'invisible': [('use_in_sat', '=', False)]}"/>
                 <field name="modelo" invisible="1"/>
             </field>
             <xpath expr="//field[@name='invoice_line_ids']//field[@name='name']" position="after">

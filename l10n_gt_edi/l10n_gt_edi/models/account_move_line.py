@@ -16,6 +16,7 @@ class AccountMoveLine(models.Model):
     impuesto_gravable = fields.Integer(
         compute="_compute_impuesto_gravable",
     )
+    predict_from_name = fields.Char()
 
     @api.depends("tax_ids")
     def _compute_impuesto_gravable(self):
@@ -40,6 +41,10 @@ class AccountMoveLine(models.Model):
 
     def _compute_product_model(self):
         for line in self:
-            index_default_code = line.name.find("]")
-            description = line.name[index_default_code + 1:] 
-            line.modelo = description + " @ " + line.product_id.default_code
+            if line.move_id.move_type not in ("entry"):
+                index_default_code = line.name.find("]")
+                if index_default_code >= 0:
+                    description = line.name[index_default_code + 1:] 
+                    line.modelo = description + " @ " + line.product_id.default_code
+            else:
+                line.modelo = 0
