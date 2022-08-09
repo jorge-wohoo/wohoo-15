@@ -30,7 +30,7 @@
                 <group string="FEEL" attrs="{'invisible': [('use_in_sat', '=', False)]}">
                     <field name="allowed_type_ids" invisible="1"/>
                     <field name="dte_type_id" domain="[('id', 'in', allowed_type_ids)]" attrs="{'required': [('use_in_sat', '=', True)]}"/>
-                    
+                    <field name="invoice_type"/>
                     <field name="emision_datetime"/>
                     <field name="origin_date" attrs="{'invisible': [('move_type', 'not in', ('in_refund', 'out_refund'))]}"/>
                     <field name="origin_uuid" attrs="{'invisible': [('move_type', 'not in', ('in_refund', 'out_refund'))]}"/>

@@ -73,6 +73,9 @@ class AccountMove(models.Model):
         string='Transporte',
     )
     modelo = fields.Char()
+    invoice_type = fields.Selection(
+        related="move_type",
+    )
 
 
     @api.onchange("dte_type_id")
@@ -251,6 +254,7 @@ class AccountMove(models.Model):
             DireccionComprador=self.partner_id.street,
             CodigoComprador=0,
             OtraReferencia="N/A",
+            invoice_type=self.invoice_type,
             INCOTERM=self.invoice_incoterm_id.code,
             NombreExportador=self.company_id.name,
             CodigoExportador=self.company_id.export_code,
@@ -403,7 +407,7 @@ class AccountMove(models.Model):
                         total_monto_impuesto = ("%(ImpuestoTotal)s")  % {"ImpuestoTotal": (Decimal(self.amount_tax).quantize(Decimal("0.01"), rounding = "ROUND_HALF_UP"))}
                     
                     xml_str = xml_str[:index_total_monto_impuesto+20] + str(total_monto_impuesto) + xml_str[index2-14:]
-            xml_str = xml_str[:index_final + 9] + tag_adendda + xml_str[dte_end - 3:]
+            xml_str = xml_str[:index_final + 9] + tag_adendda + xml_str[dte_end - 4:]
             fname = self.get_fname_xml(annulled)
             self.generate_attachment_from_xml_string(xml_str, fname)
         else:
